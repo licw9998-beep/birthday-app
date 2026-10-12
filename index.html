@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>亲友生日提醒</title>
+
+<!-- PWA 与手机主屏幕配置 -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#dc2626">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="生日提醒">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+
+<style>
+  :root {
+    --ink: #1f2937;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --bg: #f9fafb;
+    --paper: #ffffff;
+    --accent: #dc2626;
+    --accent-light: #fee2e2;
+    --warm: #f59e0b;
+    --warm-light: #fef3c7;
+    --blue: #2563eb;
+    --blue-light: #dbeafe;
+    --green: #059669;
+    --green-light: #d1fae5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    min-height: 100vh;
+    padding: 16px 16px calc(24px + env(safe-area-inset-bottom)) 16px;
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: radial-gradient(circle at 10% 0%, rgba(220, 38, 38, 0.05), transparent 30%), linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+    user-select: none;
+  }
+  button, input, select, textarea { font: inherit; outline: none; }
+  button { cursor: pointer; transition: all 0.2s; }
+  .shell { max-width: 900px; margin: 0 auto; }
+  
+  /* 顶部安装提示引导条 */
+  .install-banner {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: linear-gradient(135deg, #fff1f2, #fee2e2);
+    border: 1px solid #fecdd3;
+    padding: 10px 14px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: #9f1239;
+    box-shadow: 0 2px 4px rgba(220,38,38,0.06);
+  }
+  .install-banner.show { display: flex; }
+  .install-banner span b { color: #881337; }
+  .close-banner { background: none; border: none; font-size: 18px; color: #9f1239; padding: 0 4px; }
+
+  /* 头部与统计 */
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+  .title-group h1 { font-size: clamp(22px, 5vw, 28px); font-weight: 800; display: flex; align-items: center; gap: 8px; color: #111827; }
+  .title-group p { margin-top: 4px; color: var(--muted); font-size: 12px; }
+  .stats { display: flex; gap: 8px; width: 100%; justify-content: space-between; }
+  .stat-card {
+    flex: 1;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  }
+  .stat-card b { display: block; font-size: 22px; font-weight: 800; color: #111827; }
+  .stat-card span { font-size: 11px; color: var(--muted); }
+  .stat-card.highlight b { color: var(--accent); }
+
+  /* 顶部操作工具栏 */
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    margin-bottom: 16px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03);
+  }
+  .search-input {
+    flex: 1;
+    min-width: 140px;
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #f9fafb;
+    font-size: 13px;
+  }
+  .search-input:focus { border-color: var(--accent); background: #fff; }
+  .btn {
+    height: 38px;
+    padding: 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  .btn:hover { background: #f3f4f6; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.primary:hover { background: #b91c1c; }
+  .filter-bar { display: flex; gap: 6px; overflow-x: auto; width: 100%; padding-top: 4px; padding-bottom: 2px; }
+  .btn.filter { flex-shrink: 0; padding: 0 10px; height: 32px; font-size: 12px; }
+  .btn.filter.active { background: #111827; color: #fff; border-color: #111827; }
+
+  /* 生日卡片网格 */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .card:active { transform: scale(0.99); }
+  .card.today { border: 2px solid var(--accent); background: #fffafa; }
+  .card.soon { border-color: #fca5a5; }
+
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .person-info { display: flex; align-items: center; gap: 10px; }
+  .avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #fef2f2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .name-block h3 { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .relation-badge { font-size: 11px; padding: 2px 7px; border-radius: 20px; background: #f3f4f6; color: var(--muted); font-weight: normal; }
+  .birthday-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  /* 倒计时徽章 */
+  .countdown-badge { text-align: right; }
+  .days-num { font-size: 24px; font-weight: 900; line-height: 1; color: #111827; }
+  .days-unit { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+  .card.today .days-num { color: var(--accent); }
+  .tag-status {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+  .tag-today { background: var(--accent-light); color: var(--accent); }
+  .tag-soon { background: var(--warm-light); color: #b45309; }
+
+  /* 备注展示区 */
+  .card-note {
+    background: #f9fafb;
+    border-radius: 8px;
+    padding: 9px 11px;
+    margin: 10px 0;
+    font-size: 12px;
+    color: #4b5563;
+    line-height: 1.5;
+    word-break: break-word;
+    border-left: 3px solid #d1d5db;
+    user-select: text;
+  }
+  .card-note b { color: #111827; }
+
+  .card-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px dashed var(--line);
+    padding-top: 10px;
+    margin-top: auto;
+  }
+  .next-date-text { font-size: 11px; color: var(--muted); }
+  .action-btns { display: flex; gap: 6px; }
+  .btn-sm {
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    font-size: 12px;
+    color: #4b5563;
+  }
+  .btn-sm:hover { color: #111827; }
+  .btn-sm.danger:hover { color: var(--accent); border-color: #fca5a5; }
+
+  .empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 40px 16px;
+    background: rgba(255, 255, 255, 0.7);
+    border: 2px dashed var(--line);
+    border-radius: 16px;
+    color: var(--muted);
+  }
+  .empty-state h3 { font-size: 16px; color: #374151; margin-bottom: 6px; }
+
+  /* 弹窗 Modal */
+  .modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(17, 24, 39, 0.6);
+    backdrop-filter: blur(4px);
+  }
+  .modal.open { display: flex; }
+  .dialog {
+    width: min(480px, 100%);
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .dialog h2 { font-size: 18px; margin-bottom: 14px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 5px; }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 13px;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+  @media (max-width: 480px) {
+    .form-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <!-- PWA 添加到桌面提示条 -->
+  <div class="install-banner" id="install-banner">
+    <span>📱 <b>添加到手机桌面</b>：点击浏览器【分享】或【┇菜单】，选择<b>「添加到主屏幕」</b>，即可作为独立App使用！</span>
+    <button class="close-banner" id="close-banner">&times;</button>
+  </div>
+
+  <header>
+    <div class="title-group">
+      <h1>🎂 亲友生日提醒</h1>
+      <p id="today-banner">今日日期计算中...</p>
+    </div>
+    <div class="stats">
+      <div class="stat-card"><b id="stat-total">0</b><span>总收录人数</span></div>
+      <div class="stat-card highlight"><b id="stat-7days">0</b><span>7天内生日</span></div>
+      <div class="stat-card"><b id="stat-30days">0</b><span>30天内生日</span></div>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <button class="btn primary" id="btn-add">＋ 新增亲友</button>
+    <input type="search" class="search-input" id="search-box" placeholder="搜索姓名/关系/喜好/备注...">
+    <div class="filter-bar">
+      <button class="btn filter active" data-filter="all">全部</button>
+      <button class="btn filter" data-filter="soon">30天内</button>
+      <button class="btn filter" data-filter="lunar">农历</button>
+      <button class="btn filter" data-filter="solar">公历</button>
+      <button class="btn" id="btn-export" style="height:32px;font-size:12px;padding:0 8px;">导出备份</button>
+      <button class="btn" id="btn-import" style="height:32px;font-size:12px;padding:0 8px;">导入</button>
+      <input type="file" id="import-file" accept=".json" style="display:none">
+    </div>
+  </div>
+
+  <div class="grid" id="cards-grid"></div>
+</div>
+
+<!-- 新增/编辑弹窗 -->
+<div class="modal" id="modal">
+  <div class="dialog">
+    <h2 id="modal-title">新增亲友生日</h2>
+    <form id="person-form">
+      <div class="form-row">
+        <div class="field">
+          <label for="name">姓名 / 称呼 *</label>
+          <input type="text" id="name" required placeholder="如：妈妈、张晓明">
+        </div>
+        <div class="field">
+          <label for="relation">关系分类</label>
+          <select id="relation">
+            <option value="家人">家人 / 长辈</option>
+            <option value="伴侣">伴侣 / 爱人</option>
+            <option value="亲戚">亲戚 / 亲眷</option>
+            <option value="挚友">挚友 / 死党</option>
+            <option value="同学">同学 / 朋友</option>
+            <option value="同事">同事 / 合作伙伴</option>
+            <option value="其他">其他</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label for="calendar-type">生日类型 *</label>
+          <select id="calendar-type">
+            <option value="lunar">农历 (如：九月初六)</option>
+            <option value="solar">公历 (如：10月28日)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="birth-year">出生年份 (选填，算实岁)</label>
+          <input type="number" id="birth-year" min="1920" max="2026" placeholder="如：1968">
+        </div>
+      </div>
+
+      <div class="form-row" id="lunar-inputs">
+        <div class="field">
+          <label for="lunar-month">农历月份 *</label>
+          <select id="lunar-month"></select>
+        </div>
+        <div class="field">
+          <label for="lunar-day">农历日期 *</label>
+          <select id="lunar-day"></select>
+        </div>
+      </div>
+
+      <div class="form-row" id="solar-inputs" style="display:none;">
+        <div class="field">
+          <label for="solar-month">公历月份 *</label>
+          <select id="solar-month"></select>
+        </div>
+        <div class="field">
+          <label for="solar-day">公历日期 *</label>
+          <select id="solar-day"></select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="notes">喜好、送礼备忘与忌口备注</label>
+        <textarea id="notes" rows="3" placeholder="例如：喜欢机械键盘、喝熟普洱；对海鲜过敏；今年可考虑手冲壶..."></textarea>
+      </div>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="btn-cancel">取消</button>
+        <button type="submit" class="btn primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// Service Worker 注册 (PWA 离线支持)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+
+// 检查是否运行在独立 App 模式 (Standalone)
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+if (!isStandalone) {
+  const banner = document.getElementById('install-banner');
+  if (banner && !sessionStorage.getItem('hideInstallBanner')) {
+    banner.classList.add('show');
+  }
+}
+document.getElementById('close-banner').addEventListener('click', () => {
+  document.getElementById('install-banner').classList.remove('show');
+  sessionStorage.setItem('hideInstallBanner', 'true');
+});
+
+/**
+ * 农历-公历转换算法
+ */
+const LunarHelper = (() => {
+  const LUNAR_INFO = [
+    0x04bd8,0x04ae0,0x0a570,0x054d5,0x0d260,0x0d950,0x16554,0x056a0,0x09ad0,0x055d2,
+    0x04ae0,0x0a5b6,0x0a4d0,0x0d250,0x1d255,0x0b540,0x0d6a0,0x0ada2,0x095b0,0x14977,
+    0x04970,0x0a4b0,0x0b4b5,0x06a50,0x06d40,0x1ab54,0x02b60,0x09570,0x052f2,0x04970,
+    0x06566,0x0d4a0,0x0ea50,0x06e95,0x05ad0,0x02b60,0x186e3,0x092e0,0x1c8d7,0x04950,
+    0x0d4a0,0x1f8a6,0x0b550,0x056a0,0x1aba4,0x025d0,0x092d0,0x0d2b2,0x0a950,0x0b557,
+    0x06ca0,0x0b550,0x15355,0x04da0,0x0a5d0,0x14573,0x052d0,0x0a9a8,0x0e950,0x06aa0,
+    0x0aea6,0x0ab50,0x04b60,0x0aae4,0x0a570,0x05260,0x0f263,0x0d950,0x05b57,0x056a0,
+    0x096d0,0x04dd5,0x04ad0,0x0a4d0,0x0d4d4,0x0d250,0x0d558,0x0b540,0x0b5a0,0x195a6,
+    0x095b0,0x049b0,0x0a974,0x0a4b0,0x0b27a,0x06a50,0x06d40,0x0af46,0x0ab60,0x09570,
+    0x04af5,0x04970,0x064b0,0x074a3,0x0ea50,0x06b58,0x055c0,0x0ab60,0x096d5,0x092e0,
+    0x0c960,0x0d954,0x0d4a0,0x0da50,0x07552,0x056a0,0x0abb7,0x025d0,0x092d0,0x0cab5,
+    0x0a950,0x0b4a0,0x0baa4,0x0ad50,0x055d9,0x04ba0,0x0a5b0,0x15176,0x052b0,0x0a930,
+    0x07954,0x06aa0,0x0ad50,0x05b52,0x04b60,0x0a6e6,0x0a4e0,0x0d260,0x0ea65,0x0d530,
+    0x05aa0,0x076a3,0x096d0,0x04bd7,0x04ad0,0x0a4d0,0x1d0b6,0x0d250,0x0d520,0x0dd45,
+    0x0b5a0,0x056d0,0x055b2,0x049b0,0x0a577,0x0a4b0,0x0aa50,0x1b255,0x06d20,0x0ada0,
+    0x14b63
+  ];
+
+  function leapMonth(year) { return LUNAR_INFO[year - 1900] & 0xf; }
+  function leapDays(year) {
+    if (leapMonth(year)) return (LUNAR_INFO[year - 1900] & 0x10000) ? 30 : 29;
+    return 0;
+  }
+  function monthDays(year, month) {
+    return (LUNAR_INFO[year - 1900] & (0x10000 >> month)) ? 30 : 29;
+  }
+
+  function lunarToSolar(ly, lm, ld) {
+    let offset = 0;
+    for (let y = 1900; y < ly; y++) {
+      let daysInYear = 0;
+      for (let m = 1; m <= 12; m++) daysInYear += monthDays(y, m);
+      daysInYear += leapDays(y);
+      offset += daysInYear;
+    }
+    const leap = leapMonth(ly);
+    for (let m = 1; m < lm; m++) {
+      offset += monthDays(ly, m);
+      if (leap > 0 && m === leap) offset += leapDays(ly);
+    }
+    offset += (ld - 1);
+    const baseDate = new Date(1900, 0, 31);
+    return new Date(baseDate.getTime() + offset * 86400000);
+  }
+
+  const MONTH_NAMES = ["正月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "冬月", "腊月"];
+  const DAY_NAMES = [
+    "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
+    "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+    "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"
+  ];
+
+  return { lunarToSolar, MONTH_NAMES, DAY_NAMES };
+})();
+
+/**
+ * 数据与交互
+ */
+(() => {
+  const STORAGE_KEY = "family_friends_birthdays_v1";
+
+  const DEFAULT_DATA = [
+    {
+      id: "B-0001",
+      name: "妈妈",
+      relation: "家人",
+      type: "lunar",
+      month: 9,
+      day: 6,
+      year: 1968,
+      notes: "过农历生日。平时喜欢熟普洱茶、棉麻舒适衣物；腰椎偶尔发酸，可考虑按摩仪。"
+    },
+    {
+      id: "B-0002",
+      name: "好友阿杰",
+      relation: "挚友",
+      type: "solar",
+      month: 10,
+      day: 28,
+      year: 1993,
+      notes: "数码发烧友，喜欢客制化机械键盘。去年送了手办，今年可以一起约吃火锅。"
+    }
+  ];
+
+  let state = loadData();
+  let currentFilter = "all";
+  let searchKeyword = "";
+  let editingId = null;
+
+  function loadData() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (saved && Array.isArray(saved.people)) return saved.people;
+    } catch (_) {}
+    return DEFAULT_DATA;
+  }
+
+  function persist() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ people: state, updatedAt: new Date().toISOString() }));
+  }
+
+  function calculateNextBirthday(person) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const currentYear = now.getFullYear();
+
+    let targetDate = null;
+    let nextAge = null;
+
+    if (person.type === "solar") {
+      let nextSolar = new Date(currentYear, person.month - 1, person.day);
+      if (nextSolar < today) nextSolar = new Date(currentYear + 1, person.month - 1, person.day);
+      targetDate = nextSolar;
+    } else {
+      let nextSolar = LunarHelper.lunarToSolar(currentYear, person.month, person.day);
+      if (nextSolar < today) nextSolar = LunarHelper.lunarToSolar(currentYear + 1, person.month, person.day);
+      targetDate = nextSolar;
+    }
+
+    const diffDays = Math.round((targetDate - today) / 86400000);
+    if (person.year) nextAge = targetDate.getFullYear() - person.year;
+
+    return {
+      targetDate,
+      diffDays,
+      nextAge,
+      dateString: `${targetDate.getFullYear()}年${targetDate.getMonth() + 1}月${targetDate.getDate()}日`
+    };
+  }
+
+  function initSelects() {
+    const lm = document.getElementById("lunar-month");
+    lm.innerHTML = LunarHelper.MONTH_NAMES.map((name, i) => `<option value="${i+1}">${name} (${i+1}月)</option>`).join("");
+    const ld = document.getElementById("lunar-day");
+    ld.innerHTML = LunarHelper.DAY_NAMES.map((name, i) => `<option value="${i+1}">${name}</option>`).join("");
+
+    const sm = document.getElementById("solar-month");
+    sm.innerHTML = Array.from({length: 12}, (_, i) => `<option value="${i+1}">${i+1}月</option>`).join("");
+    const sd = document.getElementById("solar-day");
+    sd.innerHTML = Array.from({length: 31}, (_, i) => `<option value="${i+1}">${i+1}日</option>`).join("");
+  }
+
+  function render() {
+    const today = new Date();
+    document.getElementById("today-banner").textContent = `今天是 ${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+
+    const list = state.map(p => ({
+      ...p,
+      calc: calculateNextBirthday(p)
+    })).sort((a, b) => a.calc.diffDays - b.calc.diffDays);
+
+    document.getElementById("stat-total").textContent = list.length;
+    document.getElementById("stat-7days").textContent = list.filter(i => i.calc.diffDays <= 7).length;
+    document.getElementById("stat-30days").textContent = list.filter(i => i.calc.diffDays <= 30).length;
+
+    let filtered = list;
+    if (currentFilter === "soon") filtered = filtered.filter(i => i.calc.diffDays <= 30);
+    if (currentFilter === "lunar") filtered = filtered.filter(i => i.type === "lunar");
+    if (currentFilter === "solar") filtered = filtered.filter(i => i.type === "solar");
+    if (searchKeyword) {
+      filtered = filtered.filter(i =>
+        i.name.toLowerCase().includes(searchKeyword) ||
+        (i.notes && i.notes.toLowerCase().includes(searchKeyword)) ||
+        (i.relation && i.relation.toLowerCase().includes(searchKeyword))
+      );
+    }
+
+    const grid = document.getElementById("cards-grid");
+    if (!filtered.length) {
+      grid.innerHTML = `
+        <div class="empty-state">
+          <h3>暂无匹配记录</h3>
+          <p>点击“＋ 新增亲友”添加生日备忘</p>
+        </div>
+      `;
+      return;
+    }
+
+    grid.innerHTML = filtered.map(item => {
+      const isToday = item.calc.diffDays === 0;
+      const isSoon = item.calc.diffDays > 0 && item.calc.diffDays <= 7;
+      const cardClass = isToday ? "card today" : isSoon ? "card soon" : "card";
+      
+      const birthdayLabel = item.type === "lunar"
+        ? `农历 ${LunarHelper.MONTH_NAMES[item.month - 1]}${LunarHelper.DAY_NAMES[item.day - 1]}`
+        : `公历 ${item.month}月${item.day}日`;
+
+      const countdownText = isToday
+        ? `<span class="tag-status tag-today">🎂 今天过生日</span>`
+        : isSoon
+        ? `<span class="tag-status tag-soon">${item.calc.diffDays} 天后</span>`
+        : `<span style="font-size:12px;color:var(--muted)">还有 <b>${item.calc.diffDays}</b> 天</span>`;
+
+      return `
+        <div class="${cardClass}">
+          <div>
+            <div class="card-top">
+              <div class="person-info">
+                <div class="avatar">${item.name.slice(0, 1)}</div>
+                <div class="name-block">
+                  <h3>${escapeHtml(item.name)} <span class="relation-badge">${item.relation || '亲友'}</span></h3>
+                  <div class="birthday-meta">
+                    <span>${birthdayLabel}</span>
+                    ${item.calc.nextAge ? `<span>· 满${item.calc.nextAge}岁</span>` : ''}
+                  </div>
+                </div>
+              </div>
+              <div class="countdown-badge">
+                <div class="days-num">${item.calc.diffDays}</div>
+                <div class="days-unit">DAYS</div>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 6px;">${countdownText}</div>
+
+            ${item.notes ? `<div class="card-note"><b>备忘：</b>${escapeHtml(item.notes)}</div>` : ''}
+          </div>
+
+          <div class="card-actions">
+            <div class="next-date-text">${item.calc.dateString}</div>
+            <div class="action-btns">
+              <button class="btn-sm" data-action="edit" data-id="${item.id}">修改</button>
+              <button class="btn-sm danger" data-action="delete" data-id="${item.id}">删除</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    grid.querySelectorAll("[data-action='edit']").forEach(b => {
+      b.addEventListener("click", () => openModal(b.dataset.id));
+    });
+    grid.querySelectorAll("[data-action='delete']").forEach(b => {
+      b.addEventListener("click", () => deletePerson(b.dataset.id));
+    });
+  }
+
+  function escapeHtml(str) {
+    return String(str || "").replace(/[&<>"']/g, m => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[m]);
+  }
+
+  function openModal(id = null) {
+    editingId = id;
+    const title = document.getElementById("modal-title");
+    const form = document.getElementById("person-form");
+    form.reset();
+
+    if (id) {
+      title.textContent = "修改亲友信息";
+      const p = state.find(item => item.id === id);
+      if (p) {
+        document.getElementById("name").value = p.name;
+        document.getElementById("relation").value = p.relation || "家人";
+        document.getElementById("calendar-type").value = p.type;
+        document.getElementById("birth-year").value = p.year || "";
+        document.getElementById("notes").value = p.notes || "";
+        if (p.type === "lunar") {
+          document.getElementById("lunar-month").value = p.month;
+          document.getElementById("lunar-day").value = p.day;
+        } else {
+          document.getElementById("solar-month").value = p.month;
+          document.getElementById("solar-day").value = p.day;
+        }
+      }
+    } else {
+      title.textContent = "新增亲友生日";
+      document.getElementById("calendar-type").value = "lunar";
+      document.getElementById("lunar-month").value = 1;
+      document.getElementById("lunar-day").value = 1;
+    }
+    toggleCalendarType();
+    document.getElementById("modal").classList.add("open");
+    document.getElementById("name").focus();
+  }
+
+  function closeModal() {
+    editingId = null;
+    document.getElementById("modal").classList.remove("open");
+  }
+
+  function toggleCalendarType() {
+    const type = document.getElementById("calendar-type").value;
+    document.getElementById("lunar-inputs").style.display = type === "lunar" ? "grid" : "none";
+    document.getElementById("solar-inputs").style.display = type === "solar" ? "grid" : "none";
+  }
+
+  function savePerson(e) {
+    e.preventDefault();
+    const name = document.getElementById("name").value.trim();
+    if (!name) return;
+
+    const relation = document.getElementById("relation").value;
+    const type = document.getElementById("calendar-type").value;
+    const year = parseInt(document.getElementById("birth-year").value) || null;
+    const notes = document.getElementById("notes").value.trim();
+
+    let month, day;
+    if (type === "lunar") {
+      month = parseInt(document.getElementById("lunar-month").value);
+      day = parseInt(document.getElementById("lunar-day").value);
+    } else {
+      month = parseInt(document.getElementById("solar-month").value);
+      day = parseInt(document.getElementById("solar-day").value);
+    }
+
+    if (editingId) {
+      const idx = state.findIndex(i => i.id === editingId);
+      if (idx !== -1) {
+        state[idx] = { ...state[idx], name, relation, type, month, day, year, notes };
+      }
+    } else {
+      const newId = `B-${String(Date.now()).slice(-4)}`;
+      state.push({ id: newId, name, relation, type, month, day, year, notes });
+    }
+
+    persist();
+    closeModal();
+    render();
+  }
+
+  function deletePerson(id) {
+    const p = state.find(i => i.id === id);
+    if (!p) return;
+    if (confirm(`确认删除“${p.name}”的生日记录？`)) {
+      state = state.filter(i => i.id !== id);
+      persist();
+      render();
+    }
+  }
+
+  document.getElementById("btn-add").addEventListener("click", () => openModal());
+  document.getElementById("btn-cancel").addEventListener("click", closeModal);
+  document.getElementById("person-form").addEventListener("submit", savePerson);
+  document.getElementById("calendar-type").addEventListener("change", toggleCalendarType);
+
+  document.getElementById("search-box").addEventListener("input", (e) => {
+    searchKeyword = e.target.value.trim().toLowerCase();
+    render();
+  });
+
+  document.querySelectorAll(".toolbar .filter").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      document.querySelectorAll(".toolbar .filter").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentFilter = btn.dataset.filter;
+      render();
+    });
+  });
+
+  document.getElementById("btn-export").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify({ people: state, exportAt: new Date().toISOString() }, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `亲友生日数据备份_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  document.getElementById("btn-import").addEventListener("click", () => {
+    document.getElementById("import-file").click();
+  });
+
+  document.getElementById("import-file").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
+        const list = Array.isArray(data) ? data : data.people;
+        if (Array.isArray(list)) {
+          state = list;
+          persist();
+          render();
+          alert("数据成功恢复并载入！");
+        } else {
+          alert("备份文件结构不匹配。");
+        }
+      } catch (err) {
+        alert("导入解析失败: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  });
+
+  initSelects();
+  render();
+})();
+</script>
+</body>
+</html>
