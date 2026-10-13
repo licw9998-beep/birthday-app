@@ -32,7 +32,7 @@
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   body {
     min-height: 100vh;
-    padding: 16px 16px calc(24px + env(safe-area-inset-bottom)) 16px;
+    padding: calc(16px + env(safe-area-inset-top, 24px)) 16px calc(24px + env(safe-area-inset-bottom, 20px)) 16px;
     color: var(--ink);
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
     background: radial-gradient(circle at 10% 0%, rgba(220, 38, 38, 0.05), transparent 30%), linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
@@ -447,8 +447,10 @@ const LunarHelper = (() => {
       if (leap > 0 && m === leap) offset += leapDays(ly);
     }
     offset += (ld - 1);
-    const baseDate = new Date(1900, 0, 31);
-    return new Date(baseDate.getTime() + offset * 86400000);
+    // 使用 UTC 1900-01-31 中午 12:00 基准，防止历史地方平时（LMT +08:05:43）和夏令时在边界时少几分钟导致跨日退回前一天
+    const baseUTC = Date.UTC(1900, 0, 31, 12, 0, 0);
+    const targetUTC = new Date(baseUTC + offset * 86400000);
+    return new Date(targetUTC.getUTCFullYear(), targetUTC.getUTCMonth(), targetUTC.getUTCDate());
   }
 
   const MONTH_NAMES = ["正月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "冬月", "腊月"];
